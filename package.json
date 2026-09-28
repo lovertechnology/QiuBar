@@ -1,0 +1,19 @@
+{
+  "name": "qiubar",
+  "productName": "QiuBar",
+  "version": "0.1.0",
+  "description": "蓝牙设备电量托盘监控 · QiuBar",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "pack": "cross-tmp-pack.cmd"
+  },
+  "dependencies": {
+    "gsap": "^3.15.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.4.5"
+  }
+}

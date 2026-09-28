@@ -1,0 +1,10 @@
+# 默认按文本处理、检出为 LF，避免 core.autocrlf 造成整文件 diff
+* text=auto eol=lf
+
+# Windows 脚本强制 CRLF：批处理在纯 LF 下容易出怪问题
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制
+*.ico binary
+*.png binary

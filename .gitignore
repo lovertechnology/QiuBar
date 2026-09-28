@@ -1,0 +1,21 @@
+# 依赖
+node_modules/
+
+# 打包产物（约 235 MB，不入库）
+dist/
+
+# 打包暂存目录（cross-tmp-pack.cmd 用作 TMP/TEMP）
+.tmp/
+
+# 运行时数据：qiubar.log 等
+data/
+
+# 日志
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
