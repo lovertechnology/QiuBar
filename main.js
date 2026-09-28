@@ -27,7 +27,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: W, height: H, show: false, frame: false, transparent: true,
     resizable: false, skipTaskbar: true, alwaysOnTop: true,
-    backgroundMaterial: 'acrylic',
+    // 不要设 backgroundMaterial：它会在整个窗口矩形上铺系统材质且不认 CSS 圆角，面板后面会露出一块直角"蒙版"
     // 本地单文件 UI、无远程内容，nodeIntegration 换掉 preload 文件
     webPreferences: { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false }
   })
