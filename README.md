@@ -11,10 +11,12 @@ QiuBar 通过 Windows 原生的蓝牙 GATT 接口直接读取设备电量，托�
 ## 特性
 
 - **托盘常驻**：图标直接把最低电量画成数字，按电量变色（薄荷绿 / 琥珀 / 红）
-- **设备轮播**：面板里滚轮即可在已连接设备之间切换，弧形表盘 + 电池格条
+- **设备轮播**：面板里滚轮即可在已连接设备之间切换，弧形表盘 + 电池格条；顺序固定（已连接优先、按名称排序），刷新不会跳页
+- **接入即刷**：常驻监听进程（WMI 事件驱动，空闲零 CPU）发现蓝牙设备接入后自动刷新，无需等下一轮轮询
+- **刷新频率可调**：面板右上角齿轮进入设置，10 秒 ~ 5 分钟六档可选，改动即时生效并持久化
 - **低电量提醒**：≤20% 提醒一次，≤10% 判定为严重不足；电量回升后自动复位，同一档位不会反复打扰
 - **悬停即看**：托盘悬停提示里列出每台设备的电量
-- **开机即用**：首次拿到数据自动亮一次面板
+- **开机即用**：首次拿到数据自动亮一次面板；重复启动程序会唤起已有实例的面板
 - **演示模式**：没有蓝牙设备也能看效果（`npm run demo`）
 - **绿色便携**：数据写在程序目录旁的 `data/`，不碰 `AppData`
 - **可访问性**：跟随系统 `prefers-reduced-motion` 设置
@@ -23,14 +25,15 @@ QiuBar 通过 Windows 原生的蓝牙 GATT 接口直接读取设备电量，托�
 
 ```
 main.js (Electron 主进程)
-   │  spawn powershell.exe -File battery.ps1       每 30s 一次
+   │  spawn powershell.exe -File battery.ps1            按设定间隔轮询（默认 30s）
+   │  spawn powershell.exe -File battery.ps1 -Watch     常驻监听蓝牙设备接入（WMI 事件）
    ▼
 battery.ps1 (PowerShell 5.1 + WinRT)
    │  BluetoothLEDevice.FromBluetoothAddressAsync()
    │  → GetGattServicesForUuidAsync(0x180F  Battery Service)
    │  → GetCharacteristicsForUuidAsync(0x2A19  Battery Level)
    ▼
-JSON 输出 → main.js → ipc → index.html (面板) / Tray (托盘图标) / Notification
+JSON 输出 → main.js（排序收口：已连接优先、按名称） → ipc → index.html (面板) / Tray (托盘图标) / Notification
 ```
 
 - **电量来源**：标准 BLE **GATT Battery Service**（`0x180F`）下的 **Battery Level** 特征（`0x2A19`），这是耳机、键鼠等外设通用的标准做法。
@@ -41,9 +44,9 @@ JSON 输出 → main.js → ipc → index.html (面板) / Tray (托盘图标) / 
 
 ```
 QiuBar/
-├── main.js                 主进程：托盘、窗口、轮询、低电量通知、日志
-├── index.html              全部 UI（单文件）：表盘、轮播、GSAP 动效、托盘图标绘制
-├── battery.ps1             PowerShell + WinRT 读取 BLE 电量
+├── main.js                 主进程：托盘、窗口、轮询、接入监听、设置持久化、低电量通知、日志
+├── index.html              全部 UI（单文件）：表盘、轮播、设置页、GSAP 动效、托盘图标绘制
+├── battery.ps1             PowerShell + WinRT 读取 BLE 电量；-Watch 模式监听设备接入
 ├── make-icon.ps1           生成 icon.ico（多尺寸 PNG-in-ICO）
 ├── icon.ico                应用图标 / 托盘图标兜底
 ├── cross-tmp-pack.cmd      打包脚本（同盘暂存 + npmmirror 镜像）
@@ -68,7 +71,7 @@ npm install
 
 npm start        # 正常运行
 npm run demo     # 演示模式：伪造 3 台设备，方便看 UI 和动效
-npm run pack     # 打包成 dist/QiuBar-win32-x64/QiuBar.exe（约 235 MB）
+npm run pack     # 打包成 dist/QiuBar-win32-x64/QiuBar.exe（约 326 MB）
 ```
 
 ## 使用说明
@@ -86,7 +89,8 @@ npm run pack     # 打包成 dist/QiuBar-win32-x64/QiuBar.exe（约 235 MB）
 | 操作 | 效果 |
 | --- | --- |
 | 滚轮 | 在设备之间轮播 |
-| `Esc` | 隐藏面板 |
+| `Esc` | 隐藏面板（设置页里是返回） |
+| 右上角齿轮 | 设置页：刷新频率六档（10s / 15s / 30s / 1m / 2m / 5m），即时生效并持久化到 `data/settings.json` |
 | 右上角刷新按钮 | 立即重新扫描 |
 | 点击面板外（失焦） | 自动隐藏 |
 
@@ -115,9 +119,10 @@ npm run pack     # 打包成 dist/QiuBar-win32-x64/QiuBar.exe（约 235 MB）
 
 1. **必须 `--no-asar`**。外部 `powershell.exe` 读不到 asar 包里的 `battery.ps1`。
 2. **不要给 `--out` 目录写 `--ignore=^/dist`**。`cmd` 会把 `^` 当转义符吃掉，参数变成**无锚点**的正则 `/dist`，于是 `node_modules/gsap/dist/` 被一并删除 —— 结果是 `gsap.min.js` 404、内联脚本报错中断、托盘图标空白，而且没有任何报错提示。`electron-packager` 本身就会忽略 `--out` 目录，不需要手动排除。
-3. **`TMP`/`TEMP` 必须指向同一磁盘的目录**（脚本里用 `.tmp`），否则跨卷 `rename` 会 `EPERM`。
+3. **`TMP`/`TEMP` 必须指向与项目同盘的目录**（脚本里用 `..\qiubar-packtmp`，且在项目树外更稳），否则跨卷 `rename` 会 `EPERM`。
 4. **`app.setPath('userData', ...)` 必须在 `app` ready 之前调用**，否则 GPU 缓存仍会写到 `AppData` 并在受限环境下崩溃。
-5. 打包产物约 235 MB，是 Electron 运行时本身的体积，不是代码。
+5. **`.ps1` 必须存成 UTF-8 带 BOM**。PS 5.1 对无 BOM 文件按系统 ANSI（中文系统是 GBK）解码，注释里的中文多字节序列会吞掉后面的换行符，把两行代码拼成一行，报出位置完全对不上的括号错误。仓库里 `.gitattributes` 已锁定，重存文件时别去掉 BOM。
+6. 打包产物约 326 MB，是 Electron 运行时本身的体积，不是代码。
 
 ## License
 

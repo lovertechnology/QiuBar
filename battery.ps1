@@ -1,8 +1,33 @@
-# QiuBar battery reader -- 输出已配对 BLE 设备电量 JSON（已在真机验证：RAPOO 键鼠可读出 96%/85%）
+﻿# QiuBar battery reader -- 输出已配对 BLE 设备电量 JSON（已在真机验证：RAPOO 键鼠可读出 96%/85%）
 # ponytail: 仅覆盖 BLE(Battery Service 0x180F)；纯经典蓝牙 HID（老设备）Windows 不暴露电量。
 # 注: COM 对象(IAsyncOperation/IBuffer)不能过 PS 函数参数边界/直接绑定，一律反射调用。
+param([int]$ParentPid = 0, [switch]$Watch)
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
+# ---------- -Watch：常驻监听模式，蓝牙设备连上时输出一行 BT-ARRIVE ----------
+# WMI 每 2s 扫一次 PnP 新节点，只认 BTHENUM(蓝牙枚举)/BTHLE(BLE) 前缀；事件驱动，平时零 CPU。
+if ($Watch) {
+  try {
+    Register-CimIndicationEvent -Query "SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity' AND (TargetInstance.DeviceID LIKE 'BTHENUM%' OR TargetInstance.DeviceID LIKE 'BTHLE%')" -SourceIdentifier QiuWatch | Out-Null
+  } catch {
+    [Console]::Out.WriteLine("BT-WATCH-ERR $($_.Exception.Message)")
+    [Console]::Out.Flush(); exit 1
+  }
+  while ($true) {
+    $e = Wait-Event -SourceIdentifier QiuWatch -Timeout 5
+    if (-not $e) {
+      # 空闲心跳：父进程没了就自杀，避免留下孤儿常驻
+      if ($ParentPid -and -not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }
+      continue
+    }
+    Start-Sleep -Milliseconds 1200                        # 等一次连接冒出的整串服务节点到齐
+    Get-Event -SourceIdentifier QiuWatch | Remove-Event   # 合并成一帧信号
+    [Console]::Out.WriteLine('BT-ARRIVE')
+    [Console]::Out.Flush()
+  }
+  exit 0
+}
 
 $json = '[]'
 try {

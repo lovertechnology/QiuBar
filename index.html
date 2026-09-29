@@ -66,6 +66,18 @@ header .sp{flex:1}
   padding:7px 18px;font:inherit;font-size:12px;letter-spacing:.1em;cursor:pointer;transition:.18s;
 }
 .state .retry:hover{border-color:rgba(95,232,255,.4)}
+
+/* ---------- settings ---------- */
+#app[data-mode=settings] #st-settings{display:flex}
+#app[data-mode=settings] #rail, #app[data-mode=settings] footer{visibility:hidden}
+.freq-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;max-width:250px}
+.chip{
+  border:1px solid var(--line);background:var(--panel2);color:var(--dim);border-radius:10px;
+  padding:11px 0;font:inherit;font-size:12px;cursor:pointer;transition:.18s;
+}
+.chip:hover{border-color:rgba(95,232,255,.35);color:var(--ink)}
+.chip.on{border-color:var(--cyan);color:var(--cyan);background:rgba(95,232,255,.08)}
+.state .hint{font-size:10.5px;letter-spacing:.12em}
 .ring{
   width:44px;height:44px;border-radius:50%;
   border:2px solid var(--line);border-top-color:var(--cyan);
@@ -150,6 +162,12 @@ footer .live i{width:4px;height:4px;border-radius:50%;background:var(--cyan);ani
   <header>
     <div class="mark"><b>QIUBAR</b><i></i><small>BLUETOOTH&nbsp;POWER</small></div>
     <span class="sp"></span>
+    <button class="icobtn" id="settings" title="设置">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
     <button class="icobtn" id="refresh" title="立即刷新">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
         <path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v4h-4"/>
@@ -170,12 +188,25 @@ footer .live i{width:4px;height:4px;border-radius:50%;background:var(--cyan);ani
       <p id="err-msg">请确认蓝牙已开启</p>
       <button class="retry" id="retry">重新扫描</button>
     </div>
+    <div class="state" id="st-settings">
+      <h2>刷新频率</h2>
+      <div class="freq-grid">
+        <button class="chip" data-ms="10000">10 秒</button>
+        <button class="chip" data-ms="15000">15 秒</button>
+        <button class="chip" data-ms="30000">30 秒</button>
+        <button class="chip" data-ms="60000">1 分钟</button>
+        <button class="chip" data-ms="120000">2 分钟</button>
+        <button class="chip" data-ms="300000">5 分钟</button>
+      </div>
+      <p class="hint">新设备接入时自动刷新</p>
+      <button class="retry" id="back">返 回</button>
+    </div>
     <div id="carousel"><div id="track"></div></div>
   </main>
 
   <nav id="rail"></nav>
   <footer>
-    <span class="live"><i></i>AUTO&nbsp;·&nbsp;30S</span>
+    <span class="live"><i></i><span id="freq">AUTO&nbsp;·&nbsp;30S</span></span>
     <span class="mono" id="updated">等待数据…</span>
   </footer>
 </div>
@@ -259,7 +290,11 @@ function build() {
       ${glyph(kindOf(d.name), 15)}<span class="bl">${d.battery >= 0 ? d.battery + '%' : '--'}</span>
     </button>`).join('')
   rail.querySelectorAll('.badge').forEach(b => b.onclick = () => go(+b.dataset.i))
+  // 列表变化时按名字找回正在看的设备，避免新设备插入导致页面跳位
+  const cur = devices[idx] && devices[idx].name
   idx = Math.min(idx, Math.max(devices.length - 1, 0))
+  const at = devices.findIndex(d => d.name === cur)
+  if (at >= 0) idx = at
   go(idx, true)
 }
 
@@ -334,7 +369,7 @@ ipcRenderer.on('devices', (_e, { devices: ds, err, ts }) => {
     app.dataset.mode = 'error'; clearInterval(timer); return
   }
   if (!devices.length) { app.dataset.mode = 'empty'; clearInterval(timer); return }
-  app.dataset.mode = 'ready'
+  if (app.dataset.mode !== 'settings') app.dataset.mode = 'ready'   // 别把设置页踢回主界面
   const sig = devices.map(d => d.name).join('§')
   if (sig !== lastSig) { lastSig = sig; build() } else updateValues()
 })
@@ -344,13 +379,29 @@ ipcRenderer.on('shown', () => {
   if (app.dataset.mode === 'ready') animateSlide(idx)
 })
 
+/* ---------- settings ---------- */
+let prevMode = 'loading'
+const fmtFreq = ms => ms < 60000 ? (ms / 1000) + 'S' : (ms / 60000) + 'MIN'
+$('#settings').onclick = () => { prevMode = app.dataset.mode; app.dataset.mode = 'settings' }
+function closeSettings() { app.dataset.mode = prevMode === 'settings' ? 'loading' : prevMode }
+$('#back').onclick = closeSettings
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => ipcRenderer.send('set-poll', +c.dataset.ms))
+ipcRenderer.on('settings', (_e, { pollMs: ms }) => {
+  $('#freq').textContent = 'AUTO · ' + fmtFreq(ms)
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', +c.dataset.ms === ms))
+})
+
 /* ---------- controls ---------- */
 $('#refresh').onclick = () => {
   gsap.fromTo('#refresh svg', { rotation: 0 }, { rotation: 360, duration: .7, ease: 'power2.inOut' })
   ipcRenderer.send('refresh')
 }
 $('#retry').onclick = () => ipcRenderer.send('refresh')
-addEventListener('keydown', e => { if (e.key === 'Escape') ipcRenderer.send('hide') })
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return
+  if (app.dataset.mode === 'settings') closeSettings()   // 设置页里 Esc 是返回
+  else ipcRenderer.send('hide')
+})
 addEventListener('wheel', e => { if (Math.abs(e.deltaY) > 24 && app.dataset.mode === 'ready') go(idx + (e.deltaY > 0 ? 1 : -1)) })
 
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) gsap.globalTimeline.timeScale(50)
