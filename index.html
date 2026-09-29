@@ -361,6 +361,14 @@ function updateValues() {
   })
 }
 
+/* 手动刷新标记：点击刷新/重扫时置位，数据回来后闪光一次；静默轮询不触发 */
+let expectUpdate = false
+function pulseUpdate() {
+  const s = track.children[idx]; if (!s) return
+  gsap.fromTo(s.querySelector('.aura'), { opacity: .3 }, { opacity: .09, duration: .9, ease: 'power2.out' })
+  gsap.fromTo(s.querySelector('.readout'), { scale: .955 }, { scale: 1, duration: .55, ease: 'power2.out' })
+}
+
 ipcRenderer.on('devices', (_e, { devices: ds, err, ts }) => {
   devices = ds || []
   $('#updated').textContent = '更新 ' + new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
@@ -372,6 +380,7 @@ ipcRenderer.on('devices', (_e, { devices: ds, err, ts }) => {
   if (app.dataset.mode !== 'settings') app.dataset.mode = 'ready'   // 别把设置页踢回主界面
   const sig = devices.map(d => d.name).join('§')
   if (sig !== lastSig) { lastSig = sig; build() } else updateValues()
+  if (expectUpdate) { expectUpdate = false; pulseUpdate() }
 })
 
 ipcRenderer.on('shown', () => {
@@ -394,9 +403,10 @@ ipcRenderer.on('settings', (_e, { pollMs: ms }) => {
 /* ---------- controls ---------- */
 $('#refresh').onclick = () => {
   gsap.fromTo('#refresh svg', { rotation: 0 }, { rotation: 360, duration: .7, ease: 'power2.inOut' })
+  expectUpdate = true
   ipcRenderer.send('refresh')
 }
-$('#retry').onclick = () => ipcRenderer.send('refresh')
+$('#retry').onclick = () => { expectUpdate = true; ipcRenderer.send('refresh') }
 addEventListener('keydown', e => {
   if (e.key !== 'Escape') return
   if (app.dataset.mode === 'settings') closeSettings()   // 设置页里 Esc 是返回
