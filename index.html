@@ -369,18 +369,25 @@ function pulseUpdate() {
   gsap.fromTo(s.querySelector('.readout'), { scale: .955 }, { scale: 1, duration: .55, ease: 'power2.out' })
 }
 
+/* 界面模式收口：lastMode 记录最近一次数据到达后应处的模式（loading/empty/error/ready）。
+   设置页是覆盖层：数据推送时若正停在设置页，只更新 lastMode 不动 data-mode，返回时恢复最新状态。
+   之前用 prevMode 恢复，若在 loading 期进设置，返回会回到过时的 loading，卡 SCANNING 到下一轮轮询。 */
+let lastMode = 'loading'
+function setMode(m) { lastMode = m; if (app.dataset.mode !== 'settings') app.dataset.mode = m }
+
 ipcRenderer.on('devices', (_e, { devices: ds, err, ts }) => {
   devices = ds || []
   $('#updated').textContent = '更新 ' + new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
   if (!devices.length && err) {
     $('#err-msg').textContent = err.slice(0, 120)
-    app.dataset.mode = 'error'; clearInterval(timer); return
+    rail.innerHTML = ''
+    setMode('error'); clearInterval(timer); return
   }
-  if (!devices.length) { app.dataset.mode = 'empty'; clearInterval(timer); return }
-  if (app.dataset.mode !== 'settings') app.dataset.mode = 'ready'   // 别把设置页踢回主界面
+  if (!devices.length) { rail.innerHTML = ''; setMode('empty'); clearInterval(timer); return }
+  setMode('ready')
   const sig = devices.map(d => d.name).join('§')
   if (sig !== lastSig) { lastSig = sig; build() } else updateValues()
-  if (expectUpdate) { expectUpdate = false; pulseUpdate() }
+  if (expectUpdate) { expectUpdate = false; if (app.dataset.mode === 'ready') pulseUpdate() }
 })
 
 ipcRenderer.on('shown', () => {
@@ -389,10 +396,9 @@ ipcRenderer.on('shown', () => {
 })
 
 /* ---------- settings ---------- */
-let prevMode = 'loading'
 const fmtFreq = ms => ms < 60000 ? (ms / 1000) + 'S' : (ms / 60000) + 'MIN'
-$('#settings').onclick = () => { prevMode = app.dataset.mode; app.dataset.mode = 'settings' }
-function closeSettings() { app.dataset.mode = prevMode === 'settings' ? 'loading' : prevMode }
+$('#settings').onclick = () => app.dataset.mode = 'settings'
+function closeSettings() { app.dataset.mode = lastMode }   // 恢复到数据驱动的最新模式，永不过时
 $('#back').onclick = closeSettings
 document.querySelectorAll('.chip').forEach(c => c.onclick = () => ipcRenderer.send('set-poll', +c.dataset.ms))
 ipcRenderer.on('settings', (_e, { pollMs: ms }) => {

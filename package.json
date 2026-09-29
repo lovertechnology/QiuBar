@@ -1,7 +1,7 @@
 {
   "name": "qiubar",
   "productName": "QiuBar",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "蓝牙设备电量托盘监控 · QiuBar",
   "main": "main.js",
   "scripts": {
